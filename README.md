@@ -27,6 +27,7 @@ Change the relevant email addresses in the file.
 From within your IRC client connected through znc proxy:
 
    /znc loadmodule modpython
+
    /znc loadmodule mailonmsg
 
 
