@@ -120,5 +120,5 @@ class mailonmsg(znc.Module):
     @catchfail
     def OnChanMsg(self, nick, channel, msg):
         if self._highlight(msg.s):
-            self.send_email(nick.GetNick(), msg.s)
+            self.send_email(nick.GetNick(), str(channel)+": " + msg.s)
         return znc.CONTINUE
