@@ -39,7 +39,7 @@ def trace(fn):
         s = _is_self(*args)
         if s:
             s.PutModule("TRACE: %s" % (fn.__name__))
-        fn(*args, **kwargs)
+        return fn(*args, **kwargs)
     return wrapper
 
 
@@ -47,7 +47,7 @@ def catchfail(fn):
     """Catch exceptions and get them onto the module channel."""
     def wrapper(*args, **kwargs):
         try:
-            fn(*args, **kwargs)
+            return fn(*args, **kwargs)
         except Exception as e:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             s = _is_self(*args)
@@ -61,6 +61,18 @@ def catchfail(fn):
     return wrapper
 
 
+class mailonmsgtimer(znc.Timer):
+    nick = None
+    chan = None
+    mod = None
+
+    def RunJob(self):
+        if self.mod.send_email(self.nick, self.chan):
+            self.mod.PutModule("clearing buffer")
+            self.mod.clear_buffer(self.nick, self.chan)
+            self.mod.PutModule("Email sent")
+
+
 class mailonmsg(znc.Module):
     """Module to email messages to users when they are away.
 
@@ -68,18 +80,19 @@ class mailonmsg(znc.Module):
     email when away. This tries to replicate this feature through emailing
     highlights as well as privmsg to a predefined email account.
     """
+    # module_types = [znc.CModInfo.UserModule]
+
     description = 'send email on message'
 
     keywords = []
     pending = {}
 
-    def _should_send(self, nick, msg):
+    def _should_send(self, nick, chan=None, msg=""):
         """Conditions on which we should send a notification."""
         if not self.GetNetwork().IsIRCAway():
             self.PutModule("Not sending because not away")
             return False
         else:
-            self.PutModule("Sending email")
             return True
 
     def _highlight(self, msg):
@@ -92,19 +105,61 @@ class mailonmsg(znc.Module):
 
         return False
 
+    def buffer(self, nick, chan):
+        key = "%s:%s" % (nick, chan)
+        if key in self.pending:
+            return self.pending[key]
+        else:
+            return None
+
+    def create_buffer(self, nick, chan):
+        self.pending["%s:%s" % (nick, chan)] = ""
+
+    def clear_buffer(self, nick, chan):
+        key = "%s:%s" % (nick, chan)
+        del self.pending[key]
+
+    def add_to_buffer(self, nick, chan, msg):
+        key = "%s:%s" % (nick, chan)
+        cur = self.pending[key]
+        self.pending[key] = cur + "\n" + msg
+
     @catchfail
-    def send_email(self, nick, msg):
-        if not self._should_send(nick, msg):
+    def send(self, nick, chan=None, msg=""):
+        if not self._should_send(nick=nick, chan=chan, msg=msg):
+            return False
+
+        if self.buffer(nick, chan) is None:
+            self.create_buffer(nick, chan)
+            timer = self.CreateTimer(mailonmsgtimer, interval=60, cycles=1)
+            timer.mod = self
+            timer.nick = nick
+            timer.chan = chan
+
+        self.add_to_buffer(nick, chan, msg)
+
+    @catchfail
+    def send_email(self, nick, chan):
+        msg = self.buffer(nick, chan)
+        if not msg:
+            self.PutModule("Something is wrong, no message")
             return False
 
         email = text.MIMEText(msg.encode('utf-8'), 'plain', 'utf-8')
 
-        email['Subject'] = header.Header('IRC message from %s' % nick, 'utf-8')
+        if chan:
+            email['Subject'] = header.Header(
+                'IRC message on %s from %s' % (chan, nick), 'utf-8')
+        else:
+            email['Subject'] = header.Header(
+                'IRC priv message from %s' % nick, 'utf-8')
+
         email['From'] = self.nv['from']
         email['To'] = self.nv['to']
         s = smtplib.SMTP('localhost')
         s.sendmail(email['From'], [email['To']], email.as_string())
         s.quit()
+        return True
 
     @catchfail
     @trace
@@ -151,6 +206,10 @@ class mailonmsg(znc.Module):
     @catchfail
     def OnChanMsg(self, nick, channel, msg):
         if self._highlight(msg.s):
-            self.send_email(nick.GetNick(),
-                            "%s: %s" % (channel.GetName(), msg.s))
+            self.send(nick=nick.GetNick(), chan=channel.GetName(),
+                      msg=msg.s)
         return znc.CONTINUE
+
+    @catchfail
+    def GetWebMenuTitle(self):
+        return "E-Mail on messages when away"
