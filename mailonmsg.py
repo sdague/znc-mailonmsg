@@ -12,13 +12,16 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-import znc
 import pprint
-
-import smtplib
+import sys
+import traceback
 
 # Import the email modules we'll need
-from email.mime.text import MIMEText
+from email import header
+from email.mime import text
+import smtplib
+import znc
+
 
 pp = pprint.PrettyPrinter()
 
@@ -46,9 +49,15 @@ def catchfail(fn):
         try:
             fn(*args, **kwargs)
         except Exception as e:
+            exc_type, exc_value, exc_traceback = sys.exc_info()
             s = _is_self(*args)
             if s:
                 s.PutModule("Failed with %s" % (e))
+                # then get the whole stack trace out
+                lines = traceback.format_exception(exc_type, exc_value,
+                                                   exc_traceback)
+                for line in lines:
+                    s.PutModule(line)
     return wrapper
 
 
@@ -86,9 +95,9 @@ class mailonmsg(znc.Module):
         if not self._should_send(nick, msg):
             return False
 
-        email = MIMEText(msg)
+        email = text.MIMEText(msg.encode('utf-8'), 'plain', 'utf-8')
 
-        email['Subject'] = 'IRC message from %s' % nick
+        email['Subject'] = header.Header('IRC message from %s' % nick, 'utf-8')
         email['From'] = 'znc@dague.net'
         email['To'] = 'sean@dague.net'
         s = smtplib.SMTP('localhost')
@@ -120,5 +129,6 @@ class mailonmsg(znc.Module):
     @catchfail
     def OnChanMsg(self, nick, channel, msg):
         if self._highlight(msg.s):
-            self.send_email(nick.GetNick(), str(channel)+": " + msg.s)
+            self.send_email(nick.GetNick(),
+                            "%s: %s" % (channel.GetName(), msg.s))
         return znc.CONTINUE
