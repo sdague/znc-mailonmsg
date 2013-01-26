@@ -200,7 +200,7 @@ class mailonmsg(znc.Module):
     @catchfail
     def OnPrivMsg(self, nick, msg):
         # self.PutModule("PRIVMSG received from %s" % nick.GetNick())
-        self.send_email(nick.GetNick(), msg.s)
+        self.send(nick=nick.GetNick(), msg=msg.s)
         return znc.CONTINUE
 
     @catchfail
