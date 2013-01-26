@@ -117,15 +117,30 @@ class mailonmsg(znc.Module):
             self.GetUser().GetNick()
             ]
 
+        # TODO(sdague): real parser here
         arglist = args.split()
         for arg in arglist:
             k, v = arg.split("=")
-            self.nv[k] = v
-        self.PutModule("LOADED with ARGS: %s" % args)
-        # TODO(sdague): in future take in args for additional keywords
-        #print("ARGS: %s" % args)
-        #print("MSG: %s" % msg)
-        return znc.CONTINUE
+            if k in ('to', 'from'):
+                self.nv[k] = v
+
+        fail = False
+        if not 'from' in self.nv:
+            self.PutModule("No from specified, please pass from=emailaddr "
+                           "to the loadmod call")
+            fail = True
+        if not 'to' in self.nv:
+            self.PutModule("No to specified, please pass to=emailaddr "
+                           "to the loadmod call")
+            fail = True
+
+        if fail:
+            return False
+        else:
+            self.PutModule("mailonmsg loaded successfully")
+            self.PutModule("mails will be sent to '%s', from '%s'" %
+                           (self.nv['to'], self.nv['from']))
+            return znc.CONTINUE
 
     @catchfail
     def OnPrivMsg(self, nick, msg):
