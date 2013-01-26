@@ -78,7 +78,9 @@ class mailonmsg(znc.Module):
         if not self.GetNetwork().IsIRCAway():
             self.PutModule("Not sending because not away")
             return False
-        return True
+        else:
+            self.PutModule("Sending email")
+            return True
 
     def _highlight(self, msg):
         if msg.find(self.GetNetwork().GetCurNick()) != -1:
@@ -98,8 +100,8 @@ class mailonmsg(znc.Module):
         email = text.MIMEText(msg.encode('utf-8'), 'plain', 'utf-8')
 
         email['Subject'] = header.Header('IRC message from %s' % nick, 'utf-8')
-        email['From'] = 'znc@dague.net'
-        email['To'] = 'sean@dague.net'
+        email['From'] = self.nv['from']
+        email['To'] = self.nv['to']
         s = smtplib.SMTP('localhost')
         s.sendmail(email['From'], [email['To']], email.as_string())
         s.quit()
@@ -114,6 +116,11 @@ class mailonmsg(znc.Module):
         self.keywords = [
             self.GetUser().GetNick()
             ]
+
+        arglist = args.split()
+        for arg in arglist:
+            k, v = arg.split("=")
+            self.nv[k] = v
         self.PutModule("LOADED with ARGS: %s" % args)
         # TODO(sdague): in future take in args for additional keywords
         #print("ARGS: %s" % args)
