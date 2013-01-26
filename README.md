@@ -28,7 +28,11 @@ From within your IRC client connected through znc proxy:
 
    /znc loadmodule modpython
 
-   /znc loadmodule mailonmsg
+   /znc loadmodule mailonmsg to=emailaddr from=emailaddr
+
+The addresses are persisted in znc's registry, so you only need
+to specify them the first time the module loads, or when you want
+to change their values.
 
 
 Runtime
